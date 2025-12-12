@@ -57,3 +57,12 @@ Content-Type: application/json
 {
     "periodDays": 7
 }
+
+
+
+
+{
+    "success": true,
+    "token": "MTY2NDMyNjQ1MjM0NS41OTc5Mjc4Mg==.f72a9c3d4e5f6a1b",
+    "message": "Token gerado com sucesso."
+}
