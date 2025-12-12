@@ -1,13 +1,24 @@
-// api/validate.js
+// api/validate.js (CORRIGIDO com CORS e Validação Automática)
 import jwt from 'jsonwebtoken';
 
-// Mapeamento das chaves secretas
 const SERVER_SECRETS = {
     '3': process.env.SECRET_KEY_3_DAYS,
     '7': process.env.SECRET_KEY_7_DAYS,
 };
 
 export default function handler(req, res) {
+    
+    // 1. CONFIGURAÇÃO CORS (Permite a comunicação com o frontend local)
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Responde a requisições OPTIONS (Preflight)
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    // -----------------------------------------------------------
+
     if (req.method !== 'POST') {
         return res.status(405).json({ valid: false, message: 'Método não permitido.' });
     }
@@ -18,7 +29,7 @@ export default function handler(req, res) {
         return res.status(400).json({ valid: false, message: 'Token não fornecido.' });
     }
 
-    // A ordem de tentativa (7 dias primeiro, depois 3) é arbitrária, mas garante a detecção
+    // Tenta primeiro com 7 dias, depois com 3 dias.
     const secretsToTry = [
         { period: 7, key: SERVER_SECRETS['7'] },
         { period: 3, key: SERVER_SECRETS['3'] },
@@ -29,32 +40,27 @@ export default function handler(req, res) {
     for (const secretData of secretsToTry) {
         const { period, key } = secretData;
 
-        // Se a chave não estiver configurada no Vercel, pula
         if (!key) continue;
 
         try {
-            // Tenta verificar o token usando a chave do período atual
+            // Tenta verificar o token
             const decoded = jwt.verify(token, key);
 
-            // SE CHEGOU AQUI: O token é válido, a assinatura confere E não expirou.
-            
-            // Retorna imediatamente o sucesso
+            // SUCESSO na validação
             return res.status(200).json({
                 valid: true,
                 message: `Token válido. Assinado pela chave de ${period} dias.`,
                 periodDays: period,
-                decodedPayload: decoded // Informa o payload para o cliente (opcional)
+                decodedPayload: decoded 
             }); 
 
         } catch (error) {
-            // O token falhou (expirado, assinatura incorreta, etc.) com esta chave.
-            // Continua tentando com a próxima chave.
+            // Falhou. Tenta a próxima chave.
         }
     }
 
-    // Se saiu do loop sem sucesso, o token é totalmente inválido
-    // Trata os erros comuns para dar um feedback melhor
-    if (token.split('.').length !== 3) {
+    // Se o loop terminou sem sucesso
+    if (token && token.split('.').length !== 3) {
          validationResult.message = 'Formato do Token inválido. Verifique se copiou corretamente.';
     } else {
          validationResult.message = 'Token Expirado ou Assinatura Inválida. Gere um novo código.';
