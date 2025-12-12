@@ -1,5 +1,4 @@
 # 🔑 Gerador e Validador de Tokens TOTP (Time-based One-Time Password) - Serverless
-VERCEL
 
 Este projeto utiliza o Vercel para hospedar Funções Serverless seguras (Node.js) para **gerar** e **validar** códigos de acesso temporários (Token Assinado: Base64.Hash).
 
