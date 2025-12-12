@@ -1,0 +1,8 @@
+{
+  "name": "token-validator-vercel",
+  "version": "1.0.0",
+  "description": "Token generation and validation API.",
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  }
+}
