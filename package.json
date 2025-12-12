@@ -1,8 +1,13 @@
 {
   "name": "token-validator-vercel",
   "version": "1.0.0",
-  "description": "Token generation and validation API.",
+  "description": "API de Geração e Validação de JWT",
+  "main": "api/generate.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/generate.js"
+  },
   "dependencies": {
-    "crypto-js": "^4.2.0"
+    "jsonwebtoken": "^9.0.2"
   }
 }
