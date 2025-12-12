@@ -1,103 +1,64 @@
-// api/validate.js - Validação Segura (Executado no Vercel)
-const CryptoJS = require('crypto-js');
+// api/validate.js
+import jwt from 'jsonwebtoken';
 
-// ⚠️ Variáveis de Ambiente: Lidas das configurações do seu projeto Vercel
+// Mapeamento das chaves secretas
 const SERVER_SECRETS = {
-    '3': process.env.SECRET_KEY_3_DAYS, // Chave para 3 dias
-    '7': process.env.SECRET_KEY_7_DAYS, // Chave para 7 dias
+    '3': process.env.SECRET_KEY_3_DAYS,
+    '7': process.env.SECRET_KEY_7_DAYS,
 };
 
-const HASH_LENGTH = 16; 
-
-/**
- * Função utilitária para decodificar Base64 no ambiente Node.js.
- */
-function base64Decode(encodedString) {
-    try {
-        // Usa o Buffer nativo do Node.js
-        return Buffer.from(encodedString, 'base64').toString('utf-8');
-    } catch (e) {
-        return null;
-    }
-}
-
-/**
- * Recria o Hash para validar a assinatura do token.
- * Deve usar a mesma lógica (CHAVE + PayloadBase64) da geração.
- */
-function generateSignature(seed, payloadBase64) {
-    const message = payloadBase64 + seed;
-    const fullHash = CryptoJS.SHA256(message).toString(CryptoJS.enc.Hex);
-    return fullHash.substring(0, HASH_LENGTH); 
-}
-
-/**
- * Handler principal para a Função Serverless (API de Validação)
- */
-module.exports = async (req, res) => {
-    
+export default function handler(req, res) {
     if (req.method !== 'POST') {
-        return res.status(405).send('Method Not Allowed');
+        return res.status(405).json({ valid: false, message: 'Método não permitido.' });
     }
 
-    const { token, periodDays } = req.body; 
+    const { token } = req.body;
 
-    if (!token || !periodDays) {
-        return res.status(400).json({ valid: false, message: "Token e período (periodDays) são obrigatórios." });
-    }
-    
-    const period = periodDays.toString();
-    const SECRET_KEY = SERVER_SECRETS[period];
-
-    if (!SECRET_KEY) {
-        return res.status(500).json({ valid: false, message: "Erro de Configuração do Servidor: Chave secreta não encontrada." });
+    if (!token) {
+        return res.status(400).json({ valid: false, message: 'Token não fornecido.' });
     }
 
-    // 1. Separar o Token em Payload e Assinatura
-    const parts = token.split('.');
-    if (parts.length !== 2) {
-        return res.status(200).json({ valid: false, message: "Token com formato inválido (deve ser PAYLOAD.ASSINATURA)." });
+    // A ordem de tentativa (7 dias primeiro, depois 3) é arbitrária, mas garante a detecção
+    const secretsToTry = [
+        { period: 7, key: SERVER_SECRETS['7'] },
+        { period: 3, key: SERVER_SECRETS['3'] },
+    ];
+
+    let validationResult = { valid: false, message: 'Token Inválido ou Expirado.' };
+
+    for (const secretData of secretsToTry) {
+        const { period, key } = secretData;
+
+        // Se a chave não estiver configurada no Vercel, pula
+        if (!key) continue;
+
+        try {
+            // Tenta verificar o token usando a chave do período atual
+            const decoded = jwt.verify(token, key);
+
+            // SE CHEGOU AQUI: O token é válido, a assinatura confere E não expirou.
+            
+            // Retorna imediatamente o sucesso
+            return res.status(200).json({
+                valid: true,
+                message: `Token válido. Assinado pela chave de ${period} dias.`,
+                periodDays: period,
+                decodedPayload: decoded // Informa o payload para o cliente (opcional)
+            }); 
+
+        } catch (error) {
+            // O token falhou (expirado, assinatura incorreta, etc.) com esta chave.
+            // Continua tentando com a próxima chave.
+        }
     }
 
-    const payloadBase64 = parts[0];
-    const receivedSignature = parts[1];
-
-    // 2. Recalcular a Assinatura (Verificar Autenticidade)
-    const calculatedSignature = generateSignature(SECRET_KEY, payloadBase64);
-    
-
-    if (calculatedSignature !== receivedSignature) {
-        return res.status(200).json({ valid: false, message: "Falha na Assinatura. Token inválido ou adulterado." });
+    // Se saiu do loop sem sucesso, o token é totalmente inválido
+    // Trata os erros comuns para dar um feedback melhor
+    if (token.split('.').length !== 3) {
+         validationResult.message = 'Formato do Token inválido. Verifique se copiou corretamente.';
+    } else {
+         validationResult.message = 'Token Expirado ou Assinatura Inválida. Gere um novo código.';
     }
 
-    // --- O token é AUTÊNTICO (não foi alterado) ---
-    
-    // 3. Decodificar o Payload para checar a Validade
-    const payloadData = base64Decode(payloadBase64);
-
-    if (!payloadData) {
-        return res.status(200).json({ valid: false, message: "Payload ilegível ou Base64 mal formado." });
-    }
-    
-    const [expiryMsStr, randomValue] = payloadData.split('.');
-    const expiryTimestamp = parseInt(expiryMsStr);
-        
-    if (isNaN(expiryTimestamp)) {
-        return res.status(200).json({ valid: false, message: "Timestamp de expiração inválido no Payload." });
-    }
-
-    // 4. Checar a Expiração
-    const currentTimestamp = Date.now();
-
-    if (currentTimestamp > expiryTimestamp) {
-        // Token é autêntico, mas expirado
-        return res.status(200).json({ valid: false, message: "Código Expirado." });
-    }
-
-    // SUCESSO! Token é Autêntico e Válido no tempo.
-    return res.status(200).json({ 
-        valid: true, 
-        message: `Acesso autorizado para ${period} dias.`,
-        expiresAt: new Date(expiryTimestamp).toISOString()
-    });
-};
+    return res.status(401).json(validationResult);
+}
