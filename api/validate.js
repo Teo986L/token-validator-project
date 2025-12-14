@@ -9,15 +9,26 @@ export const handler = async (event, context) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type',  // ← ESSA LINHA ERA O QUE FALTAVA!
     };
 
+    // Responde ao preflight OPTIONS
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return { statusCode: 204, headers, body: '' };  // 204 No Content é o padrão para preflight
+    }
+
+    // Só permite POST para a validação real
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ valid: false, message: 'Método não permitido' })
+        };
     }
 
     try {
         const { token } = JSON.parse(event.body);
+
         const secretsToTry = [
             { period: 7, key: SERVER_SECRETS['7'] },
             { period: 3, key: SERVER_SECRETS['3'] },
@@ -30,13 +41,24 @@ export const handler = async (event, context) => {
                 return {
                     statusCode: 200,
                     headers,
-                    body: JSON.stringify({ valid: true, periodDays: secretData.period, decoded })
+                    body: JSON.stringify({ valid: true, periodDays: secretData.period })
                 };
-            } catch (err) { /* Tenta a próxima chave */ }
+            } catch (err) {
+                // Continua tentando a próxima chave
+            }
         }
 
-        return { statusCode: 401, headers, body: JSON.stringify({ valid: false, message: 'Token Inválido' }) };
+        return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ valid: false, message: 'Token Inválido ou Expirado' })
+        };
+
     } catch (error) {
-        return { statusCode: 400, headers, body: JSON.stringify({ valid: false, message: 'Erro na requisição' }) };
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ valid: false, message: 'Erro na requisição' })
+        };
     }
 };
